@@ -1,0 +1,11 @@
+query,expected_chunk_id
+"What is the standard notation for the activation function and hidden state of intermediate layers in a feedforward network?",chunk_0223
+"How can we compute the probability of a full sentence using bigram probabilities?",chunk_0046
+"How does an encoder-decoder model compute the probability of a target text given a source text?",chunk_0554
+"Why is beam search preferred over greedy search and exhaustive search in machine translation?",chunk_0492
+"How does BERT use the [CLS] token to predict the similarity score between a query and a document?",chunk_0451
+"What is the concept of temperature sampling and how does it affect word probabilities?",chunk_0281
+"Who proposed the skip-gram and CBOW algorithms for neural net language models?",chunk_0206
+"Why is the raw dot product considered problematic as a similarity metric for very long documents?",chunk_0175
+"How is the attention mechanism used to compute context vectors in sequence-to-sequence models?",chunk_0561
+"What are the main differences between a hidden Markov model and a recurrent neural network?",chunk_0564
