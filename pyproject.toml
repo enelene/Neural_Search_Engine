@@ -14,4 +14,17 @@ dependencies = [
     "scikit-learn>=1.8.0",
     "scipy>=1.17.1",
     "tqdm>=4.67.3",
+    # --- Bi-Encoder dependencies ---
+    "torch>=2.3.0",
+    "transformers>=4.41.0",
+    "tokenizers>=0.19.0",   # fast tokenizer backend used by transformers
+    "safetensors>=0.4.3",   # DistilBERT weights are stored in safetensors format
 ]
+
+[tool.uv]
+# "auto" detects the local hardware at sync time:
+#   - no GPU (your Windows laptop)  -> installs torch+cpu  (~250 MB)
+#   - CUDA GPU (a Linux/Colab box)  -> installs torch+cuXXX (~2.3 GB)
+#   - ROCm GPU                       -> installs torch+rocm
+# No manual index management needed.
+torch-backend = "auto"
