@@ -48,5 +48,5 @@ def extract_clean_text_from_pdf(pdf_path, skip_start_pages=25, skip_end_pages=80
             full_text.append(text)
 
     final_text = " ".join(full_text)
-    print(f"✅ Extracted {len(full_text)} pages of clean text.")
+    print(f"Extracted {len(full_text)} pages of clean text.")
     return final_text

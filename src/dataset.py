@@ -188,7 +188,7 @@ def save_pairs(pairs: List[Dict], path: str | Path) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(pairs, f, indent=2, ensure_ascii=False)
-    print(f"Saved {len(pairs)} pairs → {path}")
+    print(f"Saved {len(pairs)} pairs -> {path}")
 
 
 # ---------------------------------------------------------------------------

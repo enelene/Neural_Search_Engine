@@ -157,10 +157,10 @@ if __name__ == "__main__":
     torch.manual_seed(0)
     B, D = 8, 768
 
-    # Fake L2-normalized embeddings (as BiEncoder would produce)
-    q = F.normalize(torch.randn(B, D), p=2, dim=1)
-    p = F.normalize(torch.randn(B, D), p=2, dim=1)
-    n = F.normalize(torch.randn(B, D), p=2, dim=1)
+    # Fake L2-normalized embeddings with grads enabled (as the BiEncoder would produce)
+    q = F.normalize(torch.randn(B, D, requires_grad=True), p=2, dim=1)
+    p = F.normalize(torch.randn(B, D, requires_grad=True), p=2, dim=1)
+    n = F.normalize(torch.randn(B, D, requires_grad=True), p=2, dim=1)
 
     infonce = InfoNCELoss(temperature=0.07)
     triplet = TripletLoss(margin=0.3)
@@ -168,15 +168,12 @@ if __name__ == "__main__":
     loss_info = infonce(q, p)
     loss_trip = triplet(q, p, n)
 
-    print(f"InfoNCE loss  : {loss_info.item():.4f}  (≈ log(B)={torch.log(torch.tensor(float(B))):.2f} for random embs)")
-    print(f"Triplet loss  : {loss_trip.item():.4f}  (≈ margin={triplet.margin} for random embs)")
+    print(f"InfoNCE loss  : {loss_info.item():.4f}  (~ log(B)={torch.log(torch.tensor(float(B))):.2f} for random embs)")
+    print(f"Triplet loss  : {loss_trip.item():.4f}  (~ margin={triplet.margin} for random embs)")
 
-    # Verify gradients flow
-    loss_info.backward()
-    print("Gradients flow through InfoNCE: ✓")
+    # Verify gradients flow end-to-end
+    loss_info.backward(retain_graph=True)
+    print("Gradients flow through InfoNCE: OK")
 
-    loss_trip2 = triplet(q.detach().requires_grad_(True),
-                         p.detach().requires_grad_(True),
-                         n.detach().requires_grad_(True))
-    loss_trip2.backward()
-    print("Gradients flow through TripletLoss: ✓")
+    loss_trip.backward()
+    print("Gradients flow through TripletLoss: OK")

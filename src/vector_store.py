@@ -119,14 +119,14 @@ class VectorStore:
         Args:
             chunks: List of dicts with at minimum keys: ``id``, ``content``.
         """
-        print(f"Building index for {len(chunks)} chunks on {self.device}…")
+        print(f"Building index for {len(chunks)} chunks on {self.device}...")
         texts = [c["content"] for c in chunks]
 
         self.corpus_matrix = self._encode_texts(texts)  # [N, 768]
         self.chunk_ids = [c["id"] for c in chunks]
         self.chunk_texts = texts
 
-        print(f"  Corpus matrix: {tuple(self.corpus_matrix.shape)}  ✓")
+        print(f"  Corpus matrix: {tuple(self.corpus_matrix.shape)}  OK")
 
     # ------------------------------------------------------------------
     # Search
@@ -193,7 +193,7 @@ class VectorStore:
         meta = {"chunk_ids": self.chunk_ids, "chunk_texts": self.chunk_texts}
         with open(path / "metadata.json", "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False)
-        print(f"Vector store saved → {path}")
+        print(f"Vector store saved -> {path}")
 
     def load(self, path: str | Path) -> None:
         """Load a previously saved embedding matrix.

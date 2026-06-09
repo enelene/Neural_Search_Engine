@@ -213,7 +213,7 @@ def comparison_table(
         b = bm25_metrics.get(key, float("nan"))
         e = biencoder_metrics.get(key, float("nan"))
         delta = round(e - b, 4) if not (e != e or b != b) else float("nan")
-        rows.append({"Metric": key, "BM25": b, "BiEncoder": e, "Δ (BiEnc − BM25)": delta})
+        rows.append({"Metric": key, "BM25": b, "BiEncoder": e, "Delta (BiEnc - BM25)": delta})
     return pd.DataFrame(rows)
 
 

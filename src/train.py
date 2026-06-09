@@ -309,7 +309,7 @@ class Trainer:
             if val_loss < self.best_val_loss:
                 self.best_val_loss = val_loss
                 best_path = self._save_checkpoint(tag)
-                improved = f"  ✓ saved best → {best_path.name}"
+                improved = f"  saved best -> {best_path.name}"
             else:
                 improved = ""
 
@@ -321,8 +321,8 @@ class Trainer:
 
         # Always save the final weights as well
         final_path = self._save_checkpoint("final")
-        print(f"\nFinal checkpoint saved → {final_path}")
-        print(f"Log saved → {self.log_path}")
+        print(f"\nFinal checkpoint saved -> {final_path}")
+        print(f"Log saved -> {self.log_path}")
         return history
 
 
