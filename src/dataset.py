@@ -1,32 +1,3 @@
-"""
-src/dataset.py — Training data generation and PyTorch Dataset classes.
-
-This module answers the question: "What do we train on?"
-
-The Jurafsky textbook has been chunked into 999 passages (~250 words each).
-We don't have human-written (query, relevant_chunk) pairs for training
-(only 10 such pairs exist in evaluation_set.csv, and those are kept for testing).
-
-Strategy — Synthetic Query Generation:
-    For every chunk we extract its first complete sentence as a synthetic query.
-    The assumption: a well-written textbook paragraph opens with a topic sentence
-    that captures the core claim of that paragraph. This makes it a natural
-    "question" whose answer is the full paragraph.
-
-    Example:
-        Chunk:   "Language models assign probabilities to sequences of words.
-                  They are used in speech recognition, spelling correction ..."
-        Query:   "Language models assign probabilities to sequences of words."
-        Positive: full chunk text
-        Negative: randomly sampled chunk that is far away in the book
-
-Dataset classes:
-    InBatchDataset  — returns (query, positive) pairs; negatives come from the
-                      batch itself. Used with InfoNCELoss.
-    TripletDataset  — returns (query, positive, negative) triplets. Used with
-                      TripletLoss.
-"""
-
 from __future__ import annotations
 
 import json
@@ -39,13 +10,6 @@ import torch
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-# Sentence starters that suggest the sentence is NOT a self-contained topic
-# sentence (cross-references, figure captions, continuation phrases, etc.)
 _BAD_STARTS: Tuple[str, ...] = (
     "figure", "table", "as we", "see ", "for example",
     "however", "in addition", "moreover", "note that",
@@ -255,77 +219,7 @@ class InBatchDataset(Dataset):
         }
 
 
-class TripletDataset(Dataset):
-    """Dataset that yields tokenized (query, positive, negative) triplets.
-
-    Used with TripletLoss.  Explicit negatives are included per example.
-
-    Args:
-        pairs:      List of dicts with keys: query, positive_text, negative_text.
-        tokenizer:  A HuggingFace tokenizer.
-        max_length: Sequence length to pad/truncate to.
-    """
-
-    def __init__(
-        self,
-        pairs: List[Dict],
-        tokenizer: PreTrainedTokenizerBase,
-        max_length: int = 256,
-    ) -> None:
-        self.pairs = pairs
-        self.tokenizer = tokenizer
-        self.max_length = max_length
-
-    def __len__(self) -> int:
-        return len(self.pairs)
-
-    def _encode(self, text: str) -> Dict[str, torch.Tensor]:
-        enc = self.tokenizer(
-            text,
-            max_length=self.max_length,
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt",
-        )
-        return {
-            "input_ids": enc.input_ids.squeeze(0),
-            "attention_mask": enc.attention_mask.squeeze(0),
-        }
-
-    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
-        """Return a single training example.
-
-        Returns:
-            Dict with keys:
-                query_input_ids      [max_length]
-                query_attention_mask [max_length]
-                pos_input_ids        [max_length]
-                pos_attention_mask   [max_length]
-                neg_input_ids        [max_length]
-                neg_attention_mask   [max_length]
-        """
-        pair = self.pairs[idx]
-        q_enc = self._encode(pair["query"])
-        p_enc = self._encode(pair["positive_text"])
-        n_enc = self._encode(pair["negative_text"])
-        return {
-            "query_input_ids": q_enc["input_ids"],
-            "query_attention_mask": q_enc["attention_mask"],
-            "pos_input_ids": p_enc["input_ids"],
-            "pos_attention_mask": p_enc["attention_mask"],
-            "neg_input_ids": n_enc["input_ids"],
-            "neg_attention_mask": n_enc["attention_mask"],
-        }
-
-
-# ---------------------------------------------------------------------------
-# Quick self-test
-# ---------------------------------------------------------------------------
-
 if __name__ == "__main__":
-    import sys
-    from pathlib import Path
-
     root = Path(__file__).resolve().parent.parent
     chunks_path = root / "data" / "processed" / "jurafsky_chunks.json"
 

@@ -1,10 +1,5 @@
 """
-src/evaluate.py — Retrieval evaluation metrics and model comparison.
-
-This module answers: "How good is our model compared to BM25?"
-
 Metrics implemented:
-────────────────────────────────────────────────────────────────────────────
 MRR@K  (Mean Reciprocal Rank)
     The gold-standard metric for ranked retrieval evaluation.
 
@@ -34,7 +29,6 @@ Why these metrics?
     • They're standard in information retrieval (BEIR benchmark, MS MARCO, etc.)
     • They work naturally with our setup: one correct chunk per query
     • They capture both precision (MRR) and coverage (Recall)
-────────────────────────────────────────────────────────────────────────────
 """
 
 from __future__ import annotations
@@ -50,21 +44,8 @@ from rank_bm25 import BM25Okapi
 from src.vector_store import VectorStore
 
 
-# ---------------------------------------------------------------------------
-# Metric computation
-# ---------------------------------------------------------------------------
-
 def reciprocal_rank(ranked_ids: List[str], correct_id: str, k: int = 10) -> float:
-    """Compute 1/rank for the first occurrence of *correct_id* in *ranked_ids*.
-
-    Args:
-        ranked_ids: List of chunk IDs sorted by descending relevance score.
-        correct_id: The ground-truth chunk ID.
-        k:          Only consider the top-k results.
-
-    Returns:
-        1/rank if found within top-k, else 0.0.
-    """
+    
     for rank, chunk_id in enumerate(ranked_ids[:k], 1):
         if chunk_id == correct_id:
             return 1.0 / rank
@@ -72,13 +53,7 @@ def reciprocal_rank(ranked_ids: List[str], correct_id: str, k: int = 10) -> floa
 
 
 def recall_at_k(ranked_ids: List[str], correct_id: str, k: int) -> float:
-    """Return 1.0 if *correct_id* appears in the top-k results, else 0.0.
-
-    Args:
-        ranked_ids: List of chunk IDs sorted by descending relevance.
-        correct_id: The ground-truth chunk ID.
-        k:          Cutoff rank.
-    """
+    
     return 1.0 if correct_id in ranked_ids[:k] else 0.0
 
 
@@ -87,17 +62,7 @@ def compute_metrics(
     correct_ids: List[str],
     k_values: Tuple[int, ...] = (1, 5, 10),
 ) -> Dict[str, float]:
-    """Compute MRR@10 and Recall@K for a set of queries.
-
-    Args:
-        ranked_id_lists: One ranked list of chunk IDs per query.
-        correct_ids:     One ground-truth chunk ID per query.
-        k_values:        Recall cutoffs to compute.
-
-    Returns:
-        Dict of metric name → mean score over all queries.
-        Example: {"MRR@10": 0.65, "R@1": 0.4, "R@5": 0.7, "R@10": 0.8}
-    """
+    
     assert len(ranked_id_lists) == len(correct_ids), "Lists must be same length"
     n = len(correct_ids)
 
@@ -120,25 +85,12 @@ def compute_metrics(
     return results
 
 
-# ---------------------------------------------------------------------------
-# BiEncoder evaluation
-# ---------------------------------------------------------------------------
-
 def evaluate_biencoder(
     store: VectorStore,
     eval_df: pd.DataFrame,
     top_k: int = 10,
 ) -> Dict[str, float]:
-    """Evaluate a VectorStore on the hand-crafted evaluation set.
-
-    Args:
-        store:   A built VectorStore (build() must have been called).
-        eval_df: DataFrame with columns: query, expected_chunk_id.
-        top_k:   Number of results to retrieve per query.
-
-    Returns:
-        Metrics dict (MRR@10, R@1, R@5, R@10).
-    """
+   
     ranked_id_lists: List[List[str]] = []
 
     for _, row in eval_df.iterrows():
@@ -148,12 +100,7 @@ def evaluate_biencoder(
     return compute_metrics(ranked_id_lists, eval_df["expected_chunk_id"].tolist())
 
 
-# ---------------------------------------------------------------------------
-# BM25 evaluation
-# ---------------------------------------------------------------------------
-
 def _tokenize_bm25(text: str) -> List[str]:
-    """Lowercase + strip punctuation for BM25 tokenization."""
     text = text.lower().translate(str.maketrans("", "", string.punctuation))
     return text.split()
 
@@ -163,16 +110,7 @@ def evaluate_bm25(
     eval_df: pd.DataFrame,
     top_k: int = 10,
 ) -> Dict[str, float]:
-    """Evaluate BM25 retrieval on the same evaluation set.
-
-    Args:
-        chunks:  All corpus chunks (id + content).
-        eval_df: DataFrame with columns: query, expected_chunk_id.
-        top_k:   Number of results to retrieve per query.
-
-    Returns:
-        Metrics dict (MRR@10, R@1, R@5, R@10).
-    """
+    
     corpus = [c["content"] for c in chunks]
     chunk_ids = [c["id"] for c in chunks]
 
@@ -188,25 +126,39 @@ def evaluate_bm25(
 
     return compute_metrics(ranked_id_lists, eval_df["expected_chunk_id"].tolist())
 
+def metrics_by_query_type(
+    chunks: List[Dict],
+    store,
+    eval_df: pd.DataFrame,
+    top_k: int = 10,
+) -> pd.DataFrame:
+    
+    if "query_type" not in eval_df.columns:
+        eval_df = eval_df.copy()
+        eval_df["query_type"] = "all"
 
-# ---------------------------------------------------------------------------
-# Comparison table
-# ---------------------------------------------------------------------------
+    rows: List[Dict] = []
+    for qtype, sub in eval_df.groupby("query_type"):
+        bm25_m = evaluate_bm25(chunks, sub, top_k=top_k)
+        bi_m   = evaluate_biencoder(store, sub, top_k=top_k)
+
+        for metric_name, score in bm25_m.items():
+            rows.append({"query_type": qtype, "system": "BM25",
+                         "metric": metric_name, "score": score,
+                         "n_queries": len(sub)})
+        for metric_name, score in bi_m.items():
+            rows.append({"query_type": qtype, "system": "BiEncoder",
+                         "metric": metric_name, "score": score,
+                         "n_queries": len(sub)})
+
+    return pd.DataFrame(rows)
+
 
 def comparison_table(
     bm25_metrics: Dict[str, float],
     biencoder_metrics: Dict[str, float],
 ) -> pd.DataFrame:
-    """Build a side-by-side comparison DataFrame.
 
-    Args:
-        bm25_metrics:      Metrics from evaluate_bm25().
-        biencoder_metrics: Metrics from evaluate_biencoder().
-
-    Returns:
-        DataFrame with one row per metric and columns for BM25 / BiEncoder
-        and a Δ (delta) column.
-    """
     all_keys = sorted(set(bm25_metrics) | set(biencoder_metrics))
     rows = []
     for key in all_keys:
@@ -223,16 +175,7 @@ def qualitative_comparison(
     chunks: List[Dict],
     top_k: int = 3,
 ) -> None:
-    """Print side-by-side results from BM25 and BiEncoder for a single query.
 
-    Useful for the demo notebook and the report.
-
-    Args:
-        query:   Raw query string.
-        store:   Built VectorStore.
-        chunks:  Full list of corpus chunks.
-        top_k:   Number of results to show per system.
-    """
     # BiEncoder results
     bi_results = store.search(query, top_k=top_k)
 
@@ -266,11 +209,6 @@ def qualitative_comparison(
         print(f"    {' '*40}[{rank+1}] {bi_id} (score={bi_score})")
         print(f"    {' '*40}{bi_text}...")
         print()
-
-
-# ---------------------------------------------------------------------------
-# Self-test
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     from pathlib import Path

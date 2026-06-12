@@ -1,26 +1,3 @@
-"""
-src/train.py — Full training loop for the BiEncoder.
-
-What this file does:
-    1. Loads training pairs (query, positive) from disk.
-    2. Builds PyTorch DataLoaders for train and validation.
-    3. Fine-tunes a BiEncoder (DistilBERT backbone) with InfoNCELoss.
-    4. Logs training/validation loss to a CSV and prints a live progress bar.
-    5. Saves the best checkpoint (lowest val loss) and the final checkpoint.
-
-Design decisions:
-    • Optimizer  : AdamW — standard for transformer fine-tuning. Decoupled
-                   weight decay avoids L2 penalty on bias/LayerNorm params.
-    • LR schedule: Linear warmup then linear decay. Warmup prevents large
-                   gradient steps in the first iterations when the optimizer
-                   state is empty.
-    • Loss        : InfoNCELoss with temperature=0.07. See src/loss.py for
-                   detailed rationale.
-    • batch_size  : 32. InfoNCE benefits from large batches because every
-                   other positive becomes a negative. On a T4 GPU this is
-                   comfortably within 16 GB VRAM for max_length=256.
-    • Grad clip   : 1.0. Prevents exploding gradients during the first epoch.
-"""
 
 from __future__ import annotations
 
@@ -41,26 +18,12 @@ from src.dataset import InBatchDataset, load_chunks, generate_pairs, split_pairs
 from src.loss import InfoNCELoss
 from src.model import BiEncoder
 
-
-# ---------------------------------------------------------------------------
-# Scheduler helper
-# ---------------------------------------------------------------------------
-
 def _get_linear_warmup_scheduler(
     optimizer: AdamW,
     warmup_steps: int,
     total_steps: int,
 ) -> LambdaLR:
-    """Linear warmup from 0 → 1, then linear decay from 1 → 0.
-
-    Args:
-        optimizer:    The AdamW optimizer to wrap.
-        warmup_steps: Number of steps to ramp up the LR.
-        total_steps:  Total number of training steps.
-
-    Returns:
-        A LambdaLR scheduler.
-    """
+    
     def lr_lambda(current_step: int) -> float:
         if current_step < warmup_steps:
             return float(current_step) / float(max(1, warmup_steps))
@@ -72,25 +35,12 @@ def _get_linear_warmup_scheduler(
     return LambdaLR(optimizer, lr_lambda)
 
 
-# ---------------------------------------------------------------------------
-# Training step helpers
-# ---------------------------------------------------------------------------
-
 def _forward_pass(
     model: BiEncoder,
     batch: Dict[str, torch.Tensor],
     device: torch.device,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Move batch to device, run forward pass, return (query_emb, pos_emb).
 
-    Args:
-        model:  The BiEncoder model.
-        batch:  Dict of tensors from InBatchDataset.
-        device: Target device (cuda / cpu).
-
-    Returns:
-        (query_emb [B, 768], pos_emb [B, 768]) — L2-normalized.
-    """
     q_ids  = batch["query_input_ids"].to(device)
     q_mask = batch["query_attention_mask"].to(device)
     p_ids  = batch["pos_input_ids"].to(device)
@@ -100,29 +50,7 @@ def _forward_pass(
     pos_emb   = model(p_ids, p_mask)
     return query_emb, pos_emb
 
-
-# ---------------------------------------------------------------------------
-# Main Trainer class
-# ---------------------------------------------------------------------------
-
 class Trainer:
-    """Manages the full fine-tuning loop for the BiEncoder.
-
-    Args:
-        model:        BiEncoder instance (DistilBERT + mean-pool + normalize).
-        train_pairs:  List of pair dicts (from ``generate_pairs``).
-        val_pairs:    List of pair dicts for validation.
-        output_dir:   Directory where checkpoints and logs are saved.
-        device:       Torch device string ("cuda" or "cpu").
-        max_length:   Token sequence length — must match what BiEncoder expects.
-        batch_size:   Training batch size.
-        lr:           Peak learning rate after warmup.
-        epochs:       Number of full passes over the training data.
-        temperature:  InfoNCE temperature (see src/loss.py).
-        warmup_ratio: Fraction of total steps used for LR warmup.
-        grad_clip:    Max gradient norm (set None to disable).
-    """
-
     def __init__(
         self,
         model: BiEncoder,
@@ -203,11 +131,7 @@ class Trainer:
     # ------------------------------------------------------------------
 
     def _train_epoch(self, epoch: int) -> float:
-        """Run one full epoch over the training data.
-
-        Returns:
-            Mean training loss for this epoch.
-        """
+       
         self.model.train()
         total_loss = 0.0
         steps = len(self.train_loader)
@@ -243,11 +167,7 @@ class Trainer:
 
     @torch.no_grad()
     def _val_epoch(self) -> float:
-        """Run one pass over the validation data without updating weights.
-
-        Returns:
-            Mean validation loss.
-        """
+        
         self.model.eval()
         total_loss = 0.0
         for batch in self.val_loader:
@@ -257,14 +177,7 @@ class Trainer:
         return total_loss / len(self.val_loader)
 
     def _save_checkpoint(self, tag: str) -> Path:
-        """Save the model's state dict under output_dir/<tag>.pt.
-
-        Args:
-            tag: File name without extension (e.g. "best", "final", "epoch_3").
-
-        Returns:
-            Path to the saved file.
-        """
+        
         path = self.output_dir / f"{tag}.pt"
         torch.save(self.model.state_dict(), path)
         return path
@@ -274,17 +187,8 @@ class Trainer:
         with open(self.log_path, "a", newline="") as f:
             csv.writer(f).writerow([epoch, step, f"{train_loss:.6f}", f"{val_loss:.6f}", f"{current_lr:.2e}"])
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def fit(self) -> Dict[str, List[float]]:
-        """Run the full training loop.
-
-        Returns:
-            History dict with keys ``train_loss`` and ``val_loss`` (one
-            value per epoch), useful for plotting learning curves.
-        """
+        
         history: Dict[str, List[float]] = {"train_loss": [], "val_loss": []}
 
         print(f"Training on: {self.device}")
@@ -301,10 +205,8 @@ class Trainer:
             history["train_loss"].append(train_loss)
             history["val_loss"].append(val_loss)
 
-            # Persist epoch-level log
             self._log_row(epoch, len(self.train_loader) * epoch, train_loss, val_loss)
 
-            # Save best checkpoint
             tag = "best"
             if val_loss < self.best_val_loss:
                 self.best_val_loss = val_loss
@@ -319,16 +221,11 @@ class Trainer:
                 f"time={elapsed:.1f}s{improved}"
             )
 
-        # Always save the final weights as well
         final_path = self._save_checkpoint("final")
         print(f"\nFinal checkpoint saved -> {final_path}")
         print(f"Log saved -> {self.log_path}")
         return history
 
-
-# ---------------------------------------------------------------------------
-# CLI entry point
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     import argparse
