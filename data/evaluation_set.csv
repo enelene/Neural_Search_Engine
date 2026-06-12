@@ -1,11 +1,26 @@
-query,expected_chunk_id
-"What is the standard notation for the activation function and hidden state of intermediate layers in a feedforward network?",chunk_0223
-"How can we compute the probability of a full sentence using bigram probabilities?",chunk_0046
-"How does an encoder-decoder model compute the probability of a target text given a source text?",chunk_0554
-"Why is beam search preferred over greedy search and exhaustive search in machine translation?",chunk_0492
-"How does BERT use the [CLS] token to predict the similarity score between a query and a document?",chunk_0451
-"What is the concept of temperature sampling and how does it affect word probabilities?",chunk_0281
-"Who proposed the skip-gram and CBOW algorithms for neural net language models?",chunk_0206
-"Why is the raw dot product considered problematic as a similarity metric for very long documents?",chunk_0175
-"How is the attention mechanism used to compute context vectors in sequence-to-sequence models?",chunk_0561
-"What are the main differences between a hidden Markov model and a recurrent neural network?",chunk_0564
+query,expected_chunk_id,query_type
+What is the standard notation for the activation function and hidden state of intermediate layers in a feedforward network?,chunk_0317,keyword
+How can we compute the probability of a full sentence using bigram probabilities?,chunk_0062,keyword
+How does an encoder-decoder model compute the probability of a target text given a source text?,chunk_0783,keyword
+Why is beam search preferred over greedy search and exhaustive search in machine translation?,chunk_0695,keyword
+How does BERT use the [CLS] token to predict the similarity score between a query and a document?,chunk_0638,keyword
+What is the concept of temperature sampling and how does it affect word probabilities?,chunk_0397,keyword
+Who proposed the skip-gram and CBOW algorithms for neural net language models?,chunk_0294,keyword
+Why is the raw dot product considered problematic as a similarity metric for very long documents?,chunk_0247,keyword
+How is the attention mechanism used to compute context vectors in sequence-to-sequence models?,chunk_0793,keyword
+What are the main differences between a hidden Markov model and a recurrent neural network?,chunk_0798,keyword
+How do we mathematically denote the math operations performed by hidden neurons in a deep model?,chunk_0317,paraphrase
+"When predicting word sequences one word at a time, how do successive predictions combine into a sentence likelihood?",chunk_0062,paraphrase
+What modification turns a next-word prediction model into a system that translates between languages?,chunk_0783,paraphrase
+Why do we explore multiple candidate output paths instead of always picking the locally best next token?,chunk_0695,paraphrase
+How can a transformer rerank top candidate passages after an initial inexpensive retrieval step?,chunk_0638,paraphrase
+How can we make text generation more random or more focused by tuning a softness parameter?,chunk_0397,paraphrase
+Which researchers introduced the shallow neural methods for learning dense word representations?,chunk_0294,paraphrase
+Why does the inner-product comparison of vectors tend to favor lengthy texts unfairly?,chunk_0247,paraphrase
+How are dynamic per-step source-side representations created while decoding output sequences?,chunk_0793,paraphrase
+How do probabilistic state-machine language models contrast with neural sequence networks?,chunk_0798,paraphrase
+How does Shannon's information theory mathematically describe the predictability of natural language?,chunk_0107,paraphrase_new
+What other variables must we control for when checking which word choices predict opinion in reviews?,chunk_0210,paraphrase_new
+Can innocent-looking input prompts trigger large language models to produce abusive output?,chunk_0423,paraphrase_new
+What additional training step teaches a pretrained generator to obey natural-language commands?,chunk_0568,paraphrase_new
+Where is automatic transcription of human speech practically useful beyond captions and assistants?,chunk_0878,paraphrase_new

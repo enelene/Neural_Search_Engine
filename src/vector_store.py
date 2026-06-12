@@ -7,17 +7,17 @@ from typing import Dict, List, Optional
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from src.model import BiEncoder
+from src.tokenizer import BPETokenizer
 
 
 class VectorStore:
-    
+
     def __init__(
         self,
         model: BiEncoder,
-        tokenizer: PreTrainedTokenizerBase,
+        tokenizer: BPETokenizer,
         max_length: int = 256,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         batch_size: int = 64,
@@ -28,7 +28,7 @@ class VectorStore:
         self.max_length = max_length
         self.batch_size = batch_size
 
-        self.corpus_matrix: Optional[Tensor] = None  # [N, 768]
+        self.corpus_matrix: Optional[Tensor] = None  # [N, d_model]
         self.chunk_ids: List[str] = []
         self.chunk_texts: List[str] = []
 
@@ -38,29 +38,23 @@ class VectorStore:
         for start in range(0, len(texts), self.batch_size):
             batch_texts = texts[start : start + self.batch_size]
 
-            enc = self.tokenizer(
-                batch_texts,
-                max_length=self.max_length,
-                padding="max_length",
-                truncation=True,
-                return_tensors="pt",
-            )
-            input_ids      = enc.input_ids.to(self.device)
-            attention_mask = enc.attention_mask.to(self.device)
+            enc = self.tokenizer.encode_batch(batch_texts, max_length=self.max_length)
+            input_ids = enc["input_ids"].to(self.device)
+            attention_mask = enc["attention_mask"].to(self.device)
 
             with torch.no_grad():
-                embs = self.model(input_ids, attention_mask)  
+                embs = self.model(input_ids, attention_mask)
 
             all_embs.append(embs.cpu())
 
-        return torch.cat(all_embs, dim=0)  # [N, 768]
+        return torch.cat(all_embs, dim=0)  # [N, d_model]
 
     def build(self, chunks: List[Dict]) -> None:
         
         print(f"Building index for {len(chunks)} chunks on {self.device}...")
         texts = [c["content"] for c in chunks]
 
-        self.corpus_matrix = self._encode_texts(texts)  # [N, 768]
+        self.corpus_matrix = self._encode_texts(texts)  # [N, d_model]
         self.chunk_ids = [c["id"] for c in chunks]
         self.chunk_texts = texts
 
@@ -71,7 +65,7 @@ class VectorStore:
         if self.corpus_matrix is None:
             raise RuntimeError("Call build() before search().")
 
-        q_emb = self._encode_texts([query])  # [1, 768]
+        q_emb = self._encode_texts([query])  # [1, d_model]
 
         scores = (q_emb @ self.corpus_matrix.T).squeeze(0)  # [N]
 
@@ -113,16 +107,19 @@ class VectorStore:
 
 
 if __name__ == "__main__":
-    from pathlib import Path
+    # Demo with a freshly trained tokenizer + an UNTRAINED model (just to show the
+    # pipeline runs end-to-end). For real results, load a trained checkpoint:
+    #   tokenizer = BPETokenizer.load("checkpoints/tokenizer.json")
+    #   model     = BiEncoder.load("checkpoints/best.pt")
+    from src.model import EncoderConfig
 
     root = Path(__file__).resolve().parent.parent
-    chunks_path = root / "data" / "processed" / "jurafsky_chunks.json"
-
+    chunks_path = root / "data" / "processed" / "jurafsky_chunks_v2.json"
     with open(chunks_path, encoding="utf-8") as f:
         chunks = json.load(f)
 
-    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-    model = BiEncoder()
+    tokenizer = BPETokenizer.train([c["content"] for c in chunks], vocab_size=4000, verbose=False)
+    model = BiEncoder(EncoderConfig(vocab_size=tokenizer.vocab_size))
 
     store = VectorStore(model, tokenizer, batch_size=64)
     store.build(chunks)

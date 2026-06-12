@@ -1,5 +1,12 @@
 # Project Overview — Neural Search Engine
 
+> **⚠️ Historical note.** Parts of this document describe the *earlier* version
+> that used a pretrained DistilBERT backbone. Pretrained models were later
+> **prohibited**, so the encoder and tokenizer were rebuilt **from scratch**.
+> For the current architecture see [`06_FROM_SCRATCH_MODEL.md`](06_FROM_SCRATCH_MODEL.md)
+> and [`REPORT_GE.md`](REPORT_GE.md). The data, BM25 baseline, and evaluation
+> framework below are unchanged.
+
 > **Read this first.** Everything else makes more sense after this page.
 
 ---

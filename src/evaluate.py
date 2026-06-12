@@ -212,12 +212,13 @@ def qualitative_comparison(
 
 if __name__ == "__main__":
     from pathlib import Path
-    from transformers import AutoTokenizer
-    from src.model import BiEncoder
+
+    from src.model import BiEncoder, EncoderConfig
+    from src.tokenizer import BPETokenizer
 
     root = Path(__file__).resolve().parent.parent
 
-    with open(root / "data" / "processed" / "jurafsky_chunks.json", encoding="utf-8") as f:
+    with open(root / "data" / "processed" / "jurafsky_chunks_v2.json", encoding="utf-8") as f:
         chunks = json.load(f)
 
     eval_df = pd.read_csv(root / "data" / "evaluation_set.csv")
@@ -229,14 +230,24 @@ if __name__ == "__main__":
     for k, v in bm25_metrics.items():
         print(f"  {k}: {v}")
 
-    # BiEncoder (untrained — just to check pipeline runs)
-    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-    model = BiEncoder()
+    # BiEncoder. If a trained checkpoint exists, use it; otherwise fall back to an
+    # untrained (random-init) model just to confirm the pipeline runs.
+    ckpt = root / "checkpoints" / "best.pt"
+    tok_path = root / "checkpoints" / "tokenizer.json"
+    if ckpt.exists() and tok_path.exists():
+        tokenizer = BPETokenizer.load(tok_path)
+        model = BiEncoder.load(ckpt)
+        tag = "trained"
+    else:
+        tokenizer = BPETokenizer.train([c["content"] for c in chunks], vocab_size=4000, verbose=False)
+        model = BiEncoder(EncoderConfig(vocab_size=tokenizer.vocab_size))
+        tag = "untrained (random init)"
+
     store = VectorStore(model, tokenizer, batch_size=64)
     store.build(chunks)
 
     bi_metrics = evaluate_biencoder(store, eval_df)
-    print("\nBiEncoder (pre-trained, no fine-tuning) metrics:")
+    print(f"\nBiEncoder [{tag}] metrics:")
     for k, v in bi_metrics.items():
         print(f"  {k}: {v}")
 

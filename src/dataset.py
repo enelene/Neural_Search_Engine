@@ -8,7 +8,8 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch.utils.data import Dataset
-from transformers import AutoTokenizer, PreTrainedTokenizerBase
+
+from src.tokenizer import BPETokenizer
 
 _BAD_STARTS: Tuple[str, ...] = (
     "figure", "table", "as we", "see ", "for example",
@@ -162,73 +163,80 @@ def save_pairs(pairs: List[Dict], path: str | Path) -> None:
 class InBatchDataset(Dataset):
     """Dataset that yields tokenized (query, positive) pairs.
 
-    Used with InfoNCELoss. The loss treats all other positives in the
-    same batch as negatives, so no explicit negative is needed here.
+    Used with InfoNCELoss. The loss treats all other positives in the same batch
+    as negatives, so no explicit negative is needed here.
+
+    Queries are short and documents are long, so we tokenize them with separate
+    length caps (``query_max_len`` vs ``doc_max_len``) to save compute. All pairs
+    are tokenized ONCE up front and cached as id lists; batches are then padded
+    dynamically to the longest sequence in the batch via :meth:`collate_fn`.
 
     Args:
-        pairs:      List of dicts with keys: query, positive_text.
-        tokenizer:  A HuggingFace tokenizer (e.g. AutoTokenizer for DistilBERT).
-        max_length: Sequence length to pad/truncate to. Must match BiEncoder.
+        pairs:         List of dicts with keys: query, positive_text.
+        tokenizer:     A trained :class:`BPETokenizer`.
+        query_max_len: Max token length for queries.
+        doc_max_len:   Max token length for positive documents.
     """
 
     def __init__(
         self,
         pairs: List[Dict],
-        tokenizer: PreTrainedTokenizerBase,
-        max_length: int = 256,
+        tokenizer: BPETokenizer,
+        query_max_len: int = 64,
+        doc_max_len: int = 256,
     ) -> None:
-        self.pairs = pairs
         self.tokenizer = tokenizer
-        self.max_length = max_length
+        self.query_max_len = query_max_len
+        self.doc_max_len = doc_max_len
+
+        # Pre-tokenize everything once (id lists, no padding yet).
+        self.query_ids: List[List[int]] = [
+            tokenizer.encode(p["query"], max_length=query_max_len) for p in pairs
+        ]
+        self.pos_ids: List[List[int]] = [
+            tokenizer.encode(p["positive_text"], max_length=doc_max_len) for p in pairs
+        ]
 
     def __len__(self) -> int:
-        return len(self.pairs)
+        return len(self.query_ids)
 
-    def _encode(self, text: str) -> Dict[str, torch.Tensor]:
-        """Tokenize and pad a single string to fixed length."""
-        enc = self.tokenizer(
-            text,
-            max_length=self.max_length,
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt",
-        )
+    def __getitem__(self, idx: int) -> Tuple[List[int], List[int]]:
+        return self.query_ids[idx], self.pos_ids[idx]
+
+    def _pad(self, seqs: Tuple[List[int], ...]) -> Dict[str, torch.Tensor]:
+        """Pad a list of id-lists to the batch maximum length."""
+        length = max(max((len(s) for s in seqs), default=1), 1)
+        input_ids = torch.full((len(seqs), length), self.tokenizer.pad_id, dtype=torch.long)
+        attention_mask = torch.zeros((len(seqs), length), dtype=torch.long)
+        for i, seq in enumerate(seqs):
+            n = len(seq)
+            input_ids[i, :n] = torch.tensor(seq, dtype=torch.long)
+            attention_mask[i, :n] = 1
+        return {"input_ids": input_ids, "attention_mask": attention_mask}
+
+    def collate_fn(self, batch: List[Tuple[List[int], List[int]]]) -> Dict[str, torch.Tensor]:
+        """Collate a list of (query_ids, pos_ids) into padded batch tensors."""
+        query_lists, pos_lists = zip(*batch)
+        q = self._pad(query_lists)
+        p = self._pad(pos_lists)
         return {
-            "input_ids": enc.input_ids.squeeze(0),         # [max_length]
-            "attention_mask": enc.attention_mask.squeeze(0),  # [max_length]
-        }
-
-    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
-        """Return a single training example.
-
-        Returns:
-            Dict with keys:
-                query_input_ids      [max_length]
-                query_attention_mask [max_length]
-                pos_input_ids        [max_length]
-                pos_attention_mask   [max_length]
-        """
-        pair = self.pairs[idx]
-        q_enc = self._encode(pair["query"])
-        p_enc = self._encode(pair["positive_text"])
-        return {
-            "query_input_ids": q_enc["input_ids"],
-            "query_attention_mask": q_enc["attention_mask"],
-            "pos_input_ids": p_enc["input_ids"],
-            "pos_attention_mask": p_enc["attention_mask"],
+            "query_input_ids": q["input_ids"],
+            "query_attention_mask": q["attention_mask"],
+            "pos_input_ids": p["input_ids"],
+            "pos_attention_mask": p["attention_mask"],
         }
 
 
 if __name__ == "__main__":
     root = Path(__file__).resolve().parent.parent
-    chunks_path = root / "data" / "processed" / "jurafsky_chunks.json"
+    chunks_path = root / "data" / "processed" / "jurafsky_chunks_v2.json"
 
     chunks = load_chunks(chunks_path)
     print(f"Loaded {len(chunks)} chunks")
 
     pairs = generate_pairs(chunks)
     print(f"Generated {len(pairs)} training pairs")
-    print(f"\nSample pair:")
+    print("\nSample pair:")
     p = pairs[5]
     print(f"  query        : {p['query'][:100]}")
     print(f"  positive_id  : {p['positive_id']}")
@@ -237,9 +245,10 @@ if __name__ == "__main__":
     train, val = split_pairs(pairs)
     print(f"\nTrain: {len(train)}  Val: {len(val)}")
 
-    # Test tokenization
-    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-    ds = InBatchDataset(train[:10], tokenizer, max_length=64)
-    sample = ds[0]
-    for k, v in sample.items():
+    # Test tokenization with a small from-scratch BPE tokenizer.
+    corpus = [c["content"] for c in chunks]
+    tokenizer = BPETokenizer.train(corpus, vocab_size=2000, verbose=False)
+    ds = InBatchDataset(train[:10], tokenizer, query_max_len=64, doc_max_len=128)
+    batch = ds.collate_fn([ds[i] for i in range(4)])
+    for k, v in batch.items():
         print(f"  {k}: {tuple(v.shape)}")
