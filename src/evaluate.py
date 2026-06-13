@@ -1,36 +1,3 @@
-"""
-Metrics implemented:
-MRR@K  (Mean Reciprocal Rank)
-    The gold-standard metric for ranked retrieval evaluation.
-
-    For each query we ask: "At what rank does the correct chunk appear?"
-    If the correct chunk is at rank r, we get a score of 1/r.
-    MRR = average of (1/r) across all queries.
-
-    Examples:
-        Correct chunk at rank 1 → score = 1.0   (perfect)
-        Correct chunk at rank 2 → score = 0.5
-        Correct chunk at rank 5 → score = 0.2
-        Correct chunk not in top-K → score = 0.0
-
-    MRR@10 means we only look at the top-10 results (K=10).
-
-Recall@K
-    "In what fraction of queries was the correct chunk found in the top K?"
-
-    Recall@1 = accuracy (is the #1 result correct?)
-    Recall@5 = was the correct answer anywhere in the top 5?
-    Recall@10 = was the correct answer anywhere in the top 10?
-
-    For a search engine this is more user-friendly:
-        Recall@5 ≈ "will the user see the answer on the first page?"
-
-Why these metrics?
-    • They're standard in information retrieval (BEIR benchmark, MS MARCO, etc.)
-    • They work naturally with our setup: one correct chunk per query
-    • They capture both precision (MRR) and coverage (Recall)
-"""
-
 from __future__ import annotations
 
 import json
@@ -176,10 +143,8 @@ def qualitative_comparison(
     top_k: int = 3,
 ) -> None:
 
-    # BiEncoder results
     bi_results = store.search(query, top_k=top_k)
 
-    # BM25 results
     corpus = [c["content"] for c in chunks]
     chunk_ids = [c["id"] for c in chunks]
     tokenized_corpus = [_tokenize_bm25(doc) for doc in corpus]
@@ -187,7 +152,6 @@ def qualitative_comparison(
     scores = bm25.get_scores(_tokenize_bm25(query))
     top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
 
-    # Print
     print(f"Query: {query}\n")
     print(f"{'BM25':^70}  {'BiEncoder':^70}")
     print("-" * 145)
@@ -209,47 +173,3 @@ def qualitative_comparison(
         print(f"    {' '*40}[{rank+1}] {bi_id} (score={bi_score})")
         print(f"    {' '*40}{bi_text}...")
         print()
-
-if __name__ == "__main__":
-    from pathlib import Path
-
-    from src.model import BiEncoder, EncoderConfig
-    from src.tokenizer import BPETokenizer
-
-    root = Path(__file__).resolve().parent.parent
-
-    with open(root / "data" / "processed" / "jurafsky_chunks_v2.json", encoding="utf-8") as f:
-        chunks = json.load(f)
-
-    eval_df = pd.read_csv(root / "data" / "evaluation_set.csv")
-    print(f"Eval set: {len(eval_df)} queries")
-
-    # BM25 baseline
-    bm25_metrics = evaluate_bm25(chunks, eval_df)
-    print("\nBM25 metrics:")
-    for k, v in bm25_metrics.items():
-        print(f"  {k}: {v}")
-
-    # BiEncoder. If a trained checkpoint exists, use it; otherwise fall back to an
-    # untrained (random-init) model just to confirm the pipeline runs.
-    ckpt = root / "checkpoints" / "best.pt"
-    tok_path = root / "checkpoints" / "tokenizer.json"
-    if ckpt.exists() and tok_path.exists():
-        tokenizer = BPETokenizer.load(tok_path)
-        model = BiEncoder.load(ckpt)
-        tag = "trained"
-    else:
-        tokenizer = BPETokenizer.train([c["content"] for c in chunks], vocab_size=4000, verbose=False)
-        model = BiEncoder(EncoderConfig(vocab_size=tokenizer.vocab_size))
-        tag = "untrained (random init)"
-
-    store = VectorStore(model, tokenizer, batch_size=64)
-    store.build(chunks)
-
-    bi_metrics = evaluate_biencoder(store, eval_df)
-    print(f"\nBiEncoder [{tag}] metrics:")
-    for k, v in bi_metrics.items():
-        print(f"  {k}: {v}")
-
-    print("\nComparison table:")
-    print(comparison_table(bm25_metrics, bi_metrics).to_string(index=False))

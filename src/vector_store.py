@@ -104,30 +104,3 @@ class VectorStore:
         self.chunk_ids = meta["chunk_ids"]
         self.chunk_texts = meta["chunk_texts"]
         print(f"Vector store loaded from {path}  ({len(self.chunk_ids)} chunks)")
-
-
-if __name__ == "__main__":
-    # Demo with a freshly trained tokenizer + an UNTRAINED model (just to show the
-    # pipeline runs end-to-end). For real results, load a trained checkpoint:
-    #   tokenizer = BPETokenizer.load("checkpoints/tokenizer.json")
-    #   model     = BiEncoder.load("checkpoints/best.pt")
-    from src.model import EncoderConfig
-
-    root = Path(__file__).resolve().parent.parent
-    chunks_path = root / "data" / "processed" / "jurafsky_chunks_v2.json"
-    with open(chunks_path, encoding="utf-8") as f:
-        chunks = json.load(f)
-
-    tokenizer = BPETokenizer.train([c["content"] for c in chunks], vocab_size=4000, verbose=False)
-    model = BiEncoder(EncoderConfig(vocab_size=tokenizer.vocab_size))
-
-    store = VectorStore(model, tokenizer, batch_size=64)
-    store.build(chunks)
-
-    query = "How does a language model assign probability to a sentence?"
-    results = store.search(query, top_k=3)
-
-    print(f"\nQuery: {query}\n")
-    for r in results:
-        print(f"[{r['rank']}] {r['id']}  score={r['score']:.4f}")
-        print(f"    {r['content'][:200]}\n")

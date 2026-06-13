@@ -5,20 +5,18 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "gensim>=4.4.0",
     "ipykernel>=7.2.0",
+    "matplotlib>=3.8.0",    # training curves + evaluation plots in the notebooks
     "numpy>=2.4.4",
     "pandas>=3.0.3",
-    "pymupdf>=1.27.2.3",
-    "rank-bm25>=0.2.2",
+    "pymupdf>=1.27.2.3",    # PDF text extraction (src/utils.py)
+    "rank-bm25>=0.2.2",     # BM25 baseline
     "scikit-learn>=1.8.0",
     "scipy>=1.17.1",
     "tqdm>=4.67.3",
-    # --- Bi-Encoder dependencies ---
+    # --- From-scratch encoder: only torch is needed (NO pretrained-model libs) ---
     "torch>=2.3.0",
-    "transformers>=4.41.0",
-    "tokenizers>=0.19.0",   # fast tokenizer backend used by transformers
-    "safetensors>=0.4.3",   # DistilBERT weights are stored in safetensors format
+    "anthropic>=0.40.0",    # offline LLM query generation for the dataset (notebook 01)
 ]
 
 [tool.uv]
